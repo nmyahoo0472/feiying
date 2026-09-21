@@ -84,7 +84,12 @@ jobs:
           if (-not $ok) { throw "smoke test failed: web not up" }
           Write-Output "smoke ok"
 
-      - name: 上传到 Release
+      - name: 上传到 Release(没有就先建;v1.4.9~v1.5.0 都因为忘了手动建 Release 在这一步挂过)
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload ${{ steps.ver.outputs.tag }} "feiying-desktop_${{ steps.ver.outputs.ver }}_win64.zip" --clobber --repo ${{ github.repository }}
+        shell: pwsh
+        run: |
+          $tag = '${{ steps.ver.outputs.tag }}'
+          gh release view $tag --repo ${{ github.repository }} 2>$null
+          if ($LASTEXITCODE -ne 0) { gh release create $tag --title $tag --generate-notes --repo ${{ github.repository }} }
+          gh release upload $tag "feiying-desktop_${{ steps.ver.outputs.ver }}_win64.zip" --clobber --repo ${{ github.repository }}
