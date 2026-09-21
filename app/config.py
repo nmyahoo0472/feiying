@@ -25,6 +25,7 @@ DEFAULTS = {
     "prefetch_workers": 4,    # 预取并发,别调高(>5 触发 TG flood-wait)
     "dl_sem": 5,              # 全局下载并发上限
     "update_interval_hours": 12,  # 追更检查间隔(小时)
+    "follow_idle_days": 10,       # 连续这么多天没出新集就当完结,自动停止追更(每次检查都要给 bot 发消息)
 }
 
 

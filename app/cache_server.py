@@ -7,6 +7,7 @@ from . import state
 from .config import CACHE_DIR
 
 BLOCK = 4 * 1024 * 1024
+BAD_BLOCK_TRIES = 3       # 同一块连续失败几次就放弃预取
 CHAIN_COOLDOWN = 300      # 同一集多久内不重复查下一集(秒)
 
 
@@ -31,6 +32,7 @@ class Cacher:
         self.bmpath = self.path[:-4] + ".bm"
         self.bitmap = bytearray(self.nblocks)
         self.locks = {}
+        self.bad = set()          # TG 那边连续几次都给不出来的块:预取不再碰,免得整集卡死、还拖慢别的下载
         self.demand = 0
         self.prefetch_task = None
         self._ensure_file()
@@ -115,7 +117,7 @@ class Cacher:
             i = self.demand + k
             if i >= n:
                 i -= n
-            if not self.bitmap[i] and i not in self.locks:
+            if not self.bitmap[i] and i not in self.locks and i not in self.bad:
                 return i
         return None
 
@@ -125,6 +127,7 @@ class Cacher:
 
     async def _prefetch_loop(self):
         got = 0
+        fails = {}
         async def worker():
             nonlocal got
             while True:
@@ -134,8 +137,15 @@ class Cacher:
                 try:
                     await self.get_block(blk)
                     got += 1
+                    fails.pop(blk, None)
                 except Exception as e:
+                    n = fails.get(blk, 0) + 1
+                    fails[blk] = n
                     print("[cache] prefetch blk err", self.mid, blk, repr(e), flush=True)
+                    if n >= BAD_BLOCK_TRIES:
+                        # 同一块连着失败:多半是 TG 存这块的节点坏了,再试也是超时,反而把整条连接拖慢
+                        self.bad.add(blk)
+                        print("[cache] 块 %d 连续失败 %d 次,放弃(%s %d)" % (blk, n, self.ch, self.mid), flush=True)
                     await asyncio.sleep(1)
         await asyncio.gather(*[worker() for _ in range(self.srv.workers)])
         if not got:

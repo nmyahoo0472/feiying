@@ -24,8 +24,9 @@ def save():
 
 def add(show, season=1):
     if not any(f["show"] == show for f in state.follows):
-        state.follows.append({"show": show, "season": season, "ts": int(time.time()),
-                              "last": 0, "last_count": 0})
+        now = int(time.time())
+        state.follows.append({"show": show, "season": season, "ts": now,
+                              "last": 0, "last_count": 0, "last_new": now})
         save()
         print("[follows] +追更", show, flush=True)
 

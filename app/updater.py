@@ -41,12 +41,29 @@ async def check_one(show, season=1):
     return n
 
 
+def _idle_days(f, now):
+    """离上次出新集(或入库)过了几天。"""
+    return (now - (f.get("last_new") or f.get("ts") or now)) / 86400
+
+
 async def check_all():
+    now = int(time.time())
+    limit = max(1, int(getattr(state.cfg, "follow_idle_days", 10) or 10))
     for f in list(state.follows):
         try:
             added = await check_one(f["show"], f.get("season", 1))
-            f["last"] = int(time.time())
+            now = int(time.time())
+            f["last"] = now
             f["last_count"] = added
+            if added:
+                f["last_new"] = now
+            elif _idle_days(f, now) >= limit:
+                # 完结的剧没必要一直追:每次检查都要给 bot 发片名,用户会在 bot 聊天里看到刷屏
+                print("[updater] 《%s》%d 天没出新集,视为完结,停止追更" % (f["show"], limit), flush=True)
+                state.add_ingest({"name": f["show"], "show": f["show"], "count": 0, "status": "done",
+                                  "msg": "%d 天没出新集,视为完结,已自动停止追更(要继续追就重新入库一次)" % limit,
+                                  "ts": now})
+                follows.remove(f["show"])
         except Exception as e:
             print("[updater] %s 检查出错 %r" % (f.get("show"), repr(e)), flush=True)
     follows.save()

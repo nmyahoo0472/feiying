@@ -125,11 +125,31 @@ def create_app():
         return JSONResponse({"ok": True, "msg": "已触发追更检查(后台进行,有更新会出现在下方入库记录)"})
 
     @app.post("/ingest")
-    async def do_ingest(name: str = Form(...)):
+    async def do_ingest(name: str = Form(...), start_ep: int = Form(1)):
         if not await tg.is_authorized():
             return JSONResponse({"ok": False, "msg": "未登录"})
-        rec = await control.ingest(name)
+        rec = await control.ingest(name, max(1, start_ep))
         return JSONResponse({"ok": rec["status"] == "done", **rec})
+
+    @app.post("/reroll")
+    async def do_reroll(name: str = Form(...), ep: int = Form(...), season: int = Form(1), dry: int = Form(0),
+                        mid: int = Form(0), channel: str = Form("")):
+        """某一集换片源重下(dry=1 只列候选)。真跑要十来分钟,后台进行,结果看日志/状态。"""
+        if not await tg.is_authorized():
+            return JSONResponse({"ok": False, "msg": "未登录"})
+        from .. import prepare
+        import asyncio
+        if dry:
+            return JSONResponse({"ok": True, "msg": await prepare.reroll(name, season, ep, dry=True)})
+        asyncio.create_task(prepare.reroll(name, season, ep, mid=mid or None, channel=channel or None))
+        return JSONResponse({"ok": True, "msg": "已开始给《%s》第 %d 集换源,好了会出现在媒体库" % (name, ep)})
+
+    @app.post("/requeue")
+    async def do_requeue(name: str = Form(...), season: int = Form(1), start_ep: int = Form(1)):
+        """按库里记录重新排后台准备队列(不搜 TG;重启后续上用)。"""
+        from .. import prepare
+        n = prepare.requeue_from_library(name, season, max(1, start_ep))
+        return JSONResponse({"ok": n > 0, "msg": "已按库里记录排队 %d 集,从第 %d 集起" % (n, start_ep) if n else "库里没有这部剧"})
 
     @app.get("/logs", response_class=HTMLResponse)
     async def logs_page(request: Request):

@@ -12,8 +12,9 @@ def _end(rec, status, msg):
     return rec
 
 
-async def ingest(text):
-    """text=片名/自然语言描述。返回记录 dict(msg 为给前端看的一句话结果)。"""
+async def ingest(text, start_ep=1):
+    """text=片名/自然语言描述。返回记录 dict(msg 为给前端看的一句话结果)。
+    start_ep>1:坏交错片源走后台转封装时从这集起优先(追到一半重新入库用)。"""
     rec = {"name": text, "show": text, "count": 0, "status": "running",
            "msg": "", "ts": int(time.time())}
     state.add_ingest(rec)
@@ -47,7 +48,7 @@ async def ingest(text):
         follows.add(film, season)    # 剧集自动加入追更
         rec["count"] = len(result["episodes"])
         bad, gap = await prepare.check_and_route(film, season, result["channel"],
-                                                 result["episodes"])
+                                                 result["episodes"], start_ep)
         if bad:
             # 这版片源音视频没交错,发 .strm 让飞牛直接拉会卡成幻灯片。
             # 先不发,后台下满+转封装成真文件,好一集在飞牛里出现一集。

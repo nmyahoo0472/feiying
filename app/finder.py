@@ -305,3 +305,45 @@ async def find(film, limit=SEARCH_LIMIT):
     if not d:
         return None
     return await materialize(d)
+
+def _ep_of_title(title):
+    """深链条目标题里的集号。先认 E04/第4集/EP04,再退到孤立的 1~2 位数字(避开 1080/2024 这类)。"""
+    ep = ai._parse_ep(title)
+    if ep:
+        return ep
+    m = re.search(r"(?<![\d.])(\d{1,2})(?![\dpPkK])", title or "")
+    return int(m.group(1)) if m else None
+
+
+async def alternatives(film, ep):
+    """深链bot里《film》第 ep 集的**所有**条目(不兑换),给换源用。
+    返回 [{bot, token, title}],去掉色情/不含片名核心字的。"""
+    candidates, all_links, all_deep = await _collect(film)
+    if all_links:
+        candidates += await _resolve_links(all_links)
+    core = _core(film)
+    out, seen = [], set()
+    for d in all_deep:                                   # 深链 bot 条目:{bot, token, title}
+        if d["token"] in seen or _is_spam(d["title"]):
+            continue
+        if core and not all(ch in d["title"] for ch in core):
+            continue
+        if _ep_of_title(d["title"]) == ep:
+            seen.add(d["token"])
+            out.append(d)
+    for c2 in candidates:                                # 频道直传/t.me 链接:{channel, mid, filename, size}
+        k = (c2["channel"], c2["mid"])
+        fn = c2.get("filename") or ""
+        if k in seen or _is_spam(fn) or _is_spam(c2.get("channel", "")):
+            continue
+        if not ai._title_hit(fn, film) or _ep_of_title(fn) != ep:
+            continue
+        seen.add(k)
+        out.append({"channel": c2["channel"], "mid": c2["mid"], "title": fn, "size": c2.get("size", 0)})
+    print("[finder] %s E%02d 可换源条目 %d 个: %s" % (film, ep, len(out),
+          " | ".join(d["title"][:30] for d in out[:8])), flush=True)
+    return out
+
+
+async def redeem(bot, token):
+    return await _redeem(bot, token)

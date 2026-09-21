@@ -32,6 +32,11 @@ async def start_services():
         state.cache = cache_server.CacheServer(state.cfg)
         await state.cache.start()
         asyncio.create_task(state.cache.resume_incomplete())
+        try:
+            from . import prepare
+            prepare.resume_pending()       # 上次没转完的坏交错剧,重启后接着做
+        except Exception as e:
+            print("[service] 续后台准备失败", repr(e), flush=True)
 
 
 async def _start_watchdog():
